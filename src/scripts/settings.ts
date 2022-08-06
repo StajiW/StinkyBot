@@ -3,19 +3,21 @@ import { RequestType } from './request'
 export type Settings = {
     spotify: boolean,
     youtube: boolean,
-    soundcloud: boolean,
+    soundCloud: boolean,
     maxDuration: number,
     maxRequests: number,
     connectedChannel: string,
     default: RequestType
+    fallback: string
 }
 
 export const defaultSettings: Settings = {
-    spotify: true,
+    spotify: false,
     youtube: true,
-    soundcloud: true,
-    maxDuration: 600,
+    soundCloud: true,
+    maxDuration: 10,
     maxRequests: 1,
-    connectedChannel: '',
-    default: RequestType.Spotify
+    connectedChannel: 'StajiW',
+    default: RequestType.Spotify,
+    fallback: ''
 }

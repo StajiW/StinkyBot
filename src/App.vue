@@ -1,48 +1,83 @@
 <script setup lang='ts'>
 import { onMounted, ref, reactive } from 'vue'
-import { getTwitchAuthURL, ChatBot } from './scripts/twitch'
+import { getTwitchAuthURL, ChatBot, tokenIsValid } from './scripts/twitch'
 import { Request } from './scripts/request'
 import { YoutubeRequest } from './scripts/youtube'
-import Settings from './components/Settings.vue'
-import { defaultSettings } from './scripts/settings'
+import SettingsPage from './components/SettingsPage.vue'
+import { defaultSettings, Settings } from './scripts/settings'
 import Requests from './components/Requests.vue'
 import { User } from './scripts/util'
 import Player from './components/Player.vue'
+import Cookies from 'js-cookie'
 
 let chatBot: ChatBot | null = null
 let loggedIn = ref(false)
+let loaded = ref(false)
 let inSettings = ref(false)
 let requests: Request[] = reactive([])
-let settings = reactive(defaultSettings)
+let settings: Settings = getSettings()
 let current = ref<Request | null>(null)
 
 onMounted(async () => {
 	const pathName = window.location.pathname
 
 	if (pathName === '/twitchcallback/') {
-		const href = window.location.href.replace('#', '?')
-    	const params = new URL(href).searchParams
-
-    	if (params.get('error')) return
-
-    	const accessToken = params.get('access_token')
-
-		if (accessToken === null) return
-
-		chatBot = await ChatBot.login(accessToken)
-		chatBot.connect('stajiw')
-		chatBot.on('request', async (user: User, request: string) => {
-			requests.push(await YoutubeRequest.fromURL(request, user.name, user.color))
-		})
-		loggedIn.value = true
-
-		history.pushState(null, '', '/')
+		await twitchCallback()
+	}
+	else if (pathName === '/spotifycallback/') {
+		await spotifyCallback()
+	}
+	else {
+		const twitchToken = Cookies.get('twitchToken')
+		if (twitchToken && await tokenIsValid(twitchToken)) await twitchLogin(twitchToken)
 	}
 
 	requests.push(await YoutubeRequest.fromURL('https://www.youtube.com/watch?v=DjYZ0enekbQ', 'StajiW', '#FF69B4'))
 	requests.push(await YoutubeRequest.fromURL('https://www.youtube.com/watch?v=z3CxXTMmSvk', 'StajiW', '#FF69B4'))
 	current.value = requests[0]
+
+	loaded.value = true
 })
+
+async function twitchCallback() {
+	const href = window.location.href.replace('#', '?')
+	const params = new URL(href).searchParams
+
+	if (params.get('error')) return
+	const accessToken = params.get('access_token')
+	if (accessToken === null) return
+	twitchLogin(accessToken)
+
+	Cookies.set('twitchToken', accessToken)
+
+	window.location.replace('/')
+}
+
+async function twitchLogin(token: string) {
+	chatBot = await ChatBot.login(token)
+	chatBot.connect('stajiw')
+	chatBot.on('request', request)
+	loggedIn.value = true
+}
+
+async function spotifyCallback() {
+	
+}
+
+async function request(user: User, request: string) {
+	requests.push(await YoutubeRequest.fromURL(request, user.name, user.color))
+}
+
+function getSettings(): Settings {
+	const str = Cookies.get('settings')
+	if (str) return JSON.parse(str)
+	return defaultSettings
+}
+
+function saveSettings(newSettings: Settings) {
+	settings = newSettings
+	Cookies.set('settings', JSON.stringify(settings))
+}
 </script>
 
 <template>
@@ -51,7 +86,7 @@ onMounted(async () => {
 		<div id='header'>StinkyBot<span> by <a href='https://www.twitch.tv/stajiw'>StajiW</a></span></div>
 		<div id='settingsIcon' v-if='loggedIn' @click='inSettings = true'/>
 	</div>
-	<div id='bottomBar' v-if='loggedIn'>
+	<div id='bottomBar' v-if='loggedIn && loaded'>
 		<div class='Column'>
 			<Requests :requests='requests' />
 		</div>
@@ -61,9 +96,9 @@ onMounted(async () => {
 	</div>
 </div>
 
-<a :href='getTwitchAuthURL()' v-if='!loggedIn'><div class='Button Centered'>Log in with your Twitch (bot) account</div></a>
+<a :href='getTwitchAuthURL()' v-if='!loggedIn && loaded'><div class='Button Centered'>Log in with your Twitch (bot) account</div></a>
 
-<Settings :active='inSettings' :settings='settings' @exit='inSettings = false'/>
+<SettingsPage :active='inSettings' :settings='settings' @exit='inSettings = false' @save='(newSettings: Settings) => saveSettings(newSettings)'/>
 
 </template>
 
@@ -106,7 +141,7 @@ html, body {
 }
 
 #header > span {
-	font-size: 2rem;
+	font-size: 1.5rem;
 	font-weight: 300;
 }
 

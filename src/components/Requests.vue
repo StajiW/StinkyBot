@@ -106,6 +106,7 @@ const iconClasses = {
     
     background-size: cover;
     filter: brightness(0);
+    border-radius: 50%;
 }
 
 .Icon.Spotify {

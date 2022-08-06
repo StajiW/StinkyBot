@@ -12,6 +12,20 @@ export function getTwitchAuthURL(): string {
 	})
 }
 
+export async function tokenIsValid(token: string) {
+    const res = await fetch('https://id.twitch.tv/oauth2/validate', {
+        headers: {
+            Authorization: `Bearer ${token}`
+        }
+    })
+
+    if (res.status !== 200) return false
+
+    const body = await res.json()
+    if (body.expires_in < 60 * 60 * 24) return false
+    return true
+}
+
 export class ChatBot {
     client: tmi.Client | null = null
     accessToken: string
@@ -40,6 +54,8 @@ export class ChatBot {
 
     connect(channel: string) {
         this.channel = channel
+        if (this.client !== null) this.client.disconnect()
+
         this.client = new tmi.Client({
             identity: {
                 username: this.userName,
@@ -91,5 +107,24 @@ export class ChatBot {
         if (!this.client) return
         if (!this.channel) return
         this.client.say(this.channel, message)
+    }
+
+    async searchChannels(query: string): Promise<string[]> {
+        const url = formURL('https://api.twitch.tv/helix/search/channels', {
+            query: encodeURI(query),
+            first: '5'
+        })
+
+        const res = await fetch(url, {
+            headers: {
+                Authorization: `Bearer ${this.accessToken}`,
+                'Client-Id': CLIENT_ID
+            }
+        })
+
+        const body = await res.json()
+        const channels = body.data.map((x: any) => x.display_name)
+
+        return channels
     }
 }

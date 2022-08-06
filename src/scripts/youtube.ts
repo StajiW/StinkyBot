@@ -24,7 +24,8 @@ export class YoutubeRequest extends Request {
         const res = await fetch(url)
 
         const body = await res.json()
-        if (body.items.length < 1) throw 'video not found'
+        
+        if (!body.items || body.items.length < 1) throw 'video not found'
 
         return body.items[0]
     }

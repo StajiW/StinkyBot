@@ -8,6 +8,10 @@ export function formURL(base: string, searchParams: { [ key: string ]: string })
     return url.href
 }
 
+export function deepCopy(obj: Object): Object {
+    return JSON.parse(JSON.stringify(obj))
+}
+
 export type User = {
     name: string,
     id: number,
