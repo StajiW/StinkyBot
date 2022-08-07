@@ -10,12 +10,12 @@ import { User } from './scripts/util'
 import Player from './components/Player.vue'
 import Cookies from 'js-cookie'
 
-let chatBot: ChatBot | null = null
+let chatBot = ref<ChatBot | null>(null)
 let loggedIn = ref(false)
 let loaded = ref(false)
 let inSettings = ref(false)
 let requests: Request[] = reactive([])
-let settings: Settings = getSettings()
+let settings: Settings = reactive(getSettings())
 let current = ref<Request | null>(null)
 
 onMounted(async () => {
@@ -50,13 +50,14 @@ async function twitchCallback() {
 
 	Cookies.set('twitchToken', accessToken)
 
-	window.location.replace('/')
+	// window.location.replace('/')
+	history.replaceState(null, '', '/')
 }
 
 async function twitchLogin(token: string) {
-	chatBot = await ChatBot.login(token)
-	chatBot.connect('stajiw')
-	chatBot.on('request', request)
+	chatBot.value = await ChatBot.login(token)
+	chatBot.value.connect('stajiw')
+	chatBot.value.on('request', request)
 	loggedIn.value = true
 }
 
@@ -75,7 +76,7 @@ function getSettings(): Settings {
 }
 
 function saveSettings(newSettings: Settings) {
-	settings = newSettings
+	Object.assign(settings, newSettings)
 	Cookies.set('settings', JSON.stringify(settings))
 }
 </script>
@@ -98,7 +99,14 @@ function saveSettings(newSettings: Settings) {
 
 <a :href='getTwitchAuthURL()' v-if='!loggedIn && loaded'><div class='Button Centered'>Log in with your Twitch (bot) account</div></a>
 
-<SettingsPage :active='inSettings' :settings='settings' @exit='inSettings = false' @save='(newSettings: Settings) => saveSettings(newSettings)'/>
+<SettingsPage
+v-if='loaded'
+:active='inSettings'
+:settings='settings'
+:chatBot='chatBot || undefined'
+@exit='inSettings = false'
+@save='(newSettings: Settings) => saveSettings(newSettings)'
+/>
 
 </template>
 
@@ -214,4 +222,10 @@ a {
 	left: 50%;
 	transform: translate(-50%, -50%);
 }
+
+/* @media (max-width: 800px) {
+	html { font-size: 0.8rem; }
+	.Column { width: 100%; }
+	#bottomBar { flex-direction: column-reverse; }
+} */
 </style>

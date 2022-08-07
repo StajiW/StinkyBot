@@ -1,7 +1,8 @@
 <script setup lang='ts'>
-import { PropType, reactive } from 'vue'
+import { PropType, reactive, watch, ref } from 'vue'
 import { defaultSettings, Settings } from '../scripts/settings'
 import { deepCopy } from '../scripts/util'
+import { ChatBot } from '../scripts/twitch'
 
 const props = defineProps({
     settings: {
@@ -11,10 +12,17 @@ const props = defineProps({
     active: {
         type: Boolean,
         required: true
+    },
+    chatBot: {
+        type: Object as PropType<ChatBot>,
+        required: false
     }
 })
 
 let settings: Settings = reactive(deepCopy(props.settings) as Settings)
+let page = ref(0)
+let suggestions = ref<string[]>([])
+let lastUpdate = 0
 
 const emit = defineEmits(['exit', 'save'])
 
@@ -22,7 +30,6 @@ function handleClick(e: MouseEvent) {
     const target = e.target as HTMLElement
     if (target.id === 'settingsContainer') {
         emit('exit')
-        Object.assign(settings, reactive(deepCopy(props.settings) as Settings))
     }
 }
 
@@ -39,61 +46,107 @@ function save() {
     if (isEmptyString(settings.maxRequests)) settings.maxRequests = defaultSettings.maxRequests
     emit('save', settings)
 }
+
+watch(() => props.active, () => {
+    if (props.active) Object.assign(settings, reactive(deepCopy(props.settings) as Settings))
+})
+
+async function updateSuggestions(str: string) {
+    console.log(str)
+    const time = new Date().getTime()
+    lastUpdate = time
+    if (props.chatBot === undefined) return
+    if (lastUpdate - time < 1000) return
+
+    const names = await props.chatBot.searchChannels(str)
+    suggestions.value = names
+}
 </script>
 
 <template>
 <div id='settingsContainer' @click='(e) => handleClick(e)' :class='{ InActive: !active }'>
     <div class='Centered' id='settings'>
-        <div class='Section'>
-            <div class='Name'>Platforms</div>
-            <div id='platforms'>
-                <div class='Icon' :class='{ InActive: !settings.spotify }' id='spotify' />
-                <div class='Icon' :class='{ InActive: !settings.youtube }' id='youtube' @click='settings.youtube = !settings.youtube' />
-                <div class='Icon' :class='{ InActive: !settings.soundCloud }' id='soundCloud' @click='settings.soundCloud = !settings.soundCloud'/>
+        <div id='pageContainer' :style='{ marginLeft: (page === 1) ? "calc(-100% - 4rem)" : "" }'>
+            <div class='Page'>
+                <div class='Nav' id='topRight' @click='page = 1'>Chat Commands <div class='Arrow' /></div>
+                <div class='Section'>
+                    <div class='Name'>Platforms</div>
+                    <div id='platforms'>
+                        <div class='Icon' :class='{ InActive: !settings.spotify }' id='spotify' />
+                        <div class='Icon' :class='{ InActive: !settings.youtube }' id='youtube' @click='settings.youtube = !settings.youtube' />
+                        <div class='Icon' :class='{ InActive: !settings.soundCloud }' id='soundCloud' @click='settings.soundCloud = !settings.soundCloud'/>
+                    </div>
+                </div>
+                <div class='Section'>
+                    <div class='Name'>Requests</div>
+                    <div class='Setting'>
+                        <div class='Name'>Max request length (minutes)</div>
+                        <input type='number' size='1' v-model='settings.maxDuration' :onkeypress='(e: KeyboardEvent) => { return isNumber(e) }'>
+                    </div>
+                    <div class='Setting'>
+                        <div class='Name'>Max requests per user</div>
+                        <input type='number' size='1' v-model='settings.maxRequests' :onkeypress='(e: KeyboardEvent) => { return isNumber(e) }'>
+                    </div>
+                </div>
+                <div class='Section'>
+                    <div class='Name'>Twitch</div>
+                    <div class='Setting'>
+                        <div class='Name'>Channel</div>
+                        <div class='InputContainer'>
+                            <input type='text' v-model='settings.connectedChannel' >
+                            <div class='Suggestions' v-if='suggestions.length > 0' @input='(e) => { updateSuggestions((e.target as HTMLInputElement).value) }'>
+                                <div class='Suggestion' v-for='suggestion in suggestions'>{{ suggestion }}</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class='Setting'>
+                        <div class='Name'>Bot Account</div>
+                        <div class='UnEditable'>
+                            <div>ChannelName</div>
+                            <div class='Dots' />
+                        </div>
+                    </div>
+                </div>
+                <div class='Section'>
+                    <div class='Name'>Music</div>
+                    <div class='Setting'>
+                        <div class='Name'>Spotify Account</div>
+                        <div class='UnEditable'>
+                            <div>AccountName</div>
+                            <div class='Dots' />
+                        </div>
+                    </div>
+                    <div class='Setting'>
+                        <div class='Name'>Fallback Playlist</div>
+                        <input class='Grow' type='text' v-model='settings.fallback'>
+                    </div>
+                </div>
             </div>
-        </div>
-        <div class='Section'>
-            <div class='Name'>Requests</div>
-            <div class='Setting'>
-                <div class='Name'>Max request length (minutes)</div>
-                <input type='number' size='1' v-model='settings.maxDuration' :onkeypress='(e: KeyboardEvent) => { return isNumber(e) }'>
-            </div>
-            <div class='Setting'>
-                <div class='Name'>Max requests per user</div>
-                <input type='number' size='1' v-model='settings.maxRequests' :onkeypress='(e: KeyboardEvent) => { return isNumber(e) }'>
-            </div>
-        </div>
-        <div class='Section'>
-            <div class='Name'>Twitch</div>
-            <div class='Setting'>
-                <div class='Name'>Channel</div>
-                <input type='text' v-model='settings.connectedChannel'>
-            </div>
-            <div class='Setting'>
-                <div class='Name'>Bot Account</div>
-                <div class='UnEditable'>
-                    <div>ChannelName</div>
-                    <div class='Dots' />
+            <div class='Page'>
+                <div class='Nav' id='topLeft' @click='page = 0'><div class='Arrow' /> General</div>
+                <div class='Setting'>
+                    <div class='Name'>Request</div>
+                    <input class='Grow' type='text' v-model='settings.fallback'>
+                </div>
+                <div class='Setting'>
+                    <div class='Name'>Edit</div>
+                    <input class='Grow' type='text' v-model='settings.fallback'>
+                </div>
+                <div class='Setting'>
+                    <div class='Name'>Cancel Request</div>
+                    <input class='Grow' type='text' v-model='settings.fallback'>
+                </div>
+                <div class='Setting'>
+                    <div class='Name'>Position</div>
+                    <input class='Grow' type='text' v-model='settings.fallback'>
+                </div>
+                <div class='Setting'>
+                    <div class='Name'>Queue</div>
+                    <input class='Grow' type='text' v-model='settings.fallback'>
                 </div>
             </div>
         </div>
-        <div class='Section'>
-            <div class='Name'>Music</div>
-            <div class='Setting'>
-                <div class='Name'>Spotify Account</div>
-                <div class='UnEditable'>
-                    <div>AccountName</div>
-                    <div class='Dots' />
-                </div>
-            </div>
-            <div class='Setting'>
-                <div class='Name'>Fallback Playlist</div>
-                <input class='Grow' type='text' v-model='settings.fallback'>
-            </div>
-        </div>
-        <div class='Section'>
-            <div id='save' @click='save()'>Save</div>
-        </div>
+        <div id='save' @click='save()'>Save</div>
     </div>
 </div>
 </template>
@@ -117,12 +170,58 @@ function save() {
 #settings {
     width: 25rem;
     padding: 2rem;
+    overflow-x: hidden;
 
     background-color: white;
     border-radius: .25rem;
 }
 
-.Section:not(:last-child) {
+#pageContainer {
+    width: calc(200% + 4rem);
+    display: flex;
+    justify-content: space-between;
+
+    transition-property: margin-left;
+    transition-duration: .5s;
+}
+
+.Page {
+    position: relative;
+    width: calc(50% - 2rem);
+}
+
+.Nav {
+    position: absolute;
+
+    user-select: none;
+    cursor: pointer;
+}
+
+.Nav#topRight {
+    top: 0;
+    right: 0;
+}
+
+.Nav#topLeft {
+    position: initial;
+    display: inline-block;
+    margin-bottom: 1rem;
+}
+
+.Nav .Arrow {
+    display: inline-block;
+    margin-bottom: -.2em;
+    width: 1em;
+    height: 1em;
+    background-image: url('../assets/arrow.svg');
+    background-size: cover;
+}
+
+.Nav#topLeft .Arrow {
+    transform: rotate(180deg);
+}
+
+.Section {
     margin-bottom: 1rem;
 }
 
@@ -136,6 +235,7 @@ function save() {
 
 .Setting {
     margin: auto;
+    margin-bottom: .5rem;
     width: 100%;
     display: flex;
     justify-content: space-between;
@@ -147,8 +247,29 @@ function save() {
     margin-right: 1rem;
 }
 
-.Setting:not(:last-child) {
-    margin-bottom: .5rem;
+.Setting .InputContainer {
+    position: relative;
+    width: calc(50% - 1rem);
+    margin-left: -.25rem;
+}
+
+.Setting .InputContainer input {
+    width: 100%;
+    margin-left: -.5rem;
+}
+
+.Suggestions {
+    position: absolute;
+    left: -.5rem;
+    width: 100%;
+    margin-top: .25rem;
+    padding: .25rem;
+    text-align: right;
+
+    background-color: #E0E0E0;
+    color: #404040;
+    border-radius: .25rem;
+    outline: .25rem solid white;
 }
 
 .Setting input {

@@ -83,8 +83,6 @@ export class ChatBot {
         if (self) return
         if (!message.startsWith('!')) return
 
-        console.log(tags)
-
         const user: User = {
             name: tags['display-name']!,
             id: parseInt(tags['user-id']!),
