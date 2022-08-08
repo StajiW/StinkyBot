@@ -3,42 +3,26 @@ import { formURL, User } from './util'
 
 const CLIENT_ID = 'lev91p9tnewrt26f03nz3d9muaefz5'
 
-export function getTwitchAuthURL(): string {
-	return formURL('https://id.twitch.tv/oauth2/authorize', {
-		client_id: CLIENT_ID,
-		redirect_uri: 'http://localhost:5173/twitchcallback/',
-		response_type: 'token',
-		scope: 'chat:read chat:edit'
-	})
-}
-
-export async function tokenIsValid(token: string) {
-    const res = await fetch('https://id.twitch.tv/oauth2/validate', {
-        headers: {
-            Authorization: `Bearer ${token}`
-        }
-    })
-
-    if (res.status !== 200) return false
-
-    const body = await res.json()
-    if (body.expires_in < 60 * 60 * 24) return false
-    return true
-}
-
-export class ChatBot {
-    client: tmi.Client | null = null
-    accessToken: string
-    userName: string
+export default class TwitchClient {
+    private static instance: TwitchClient
+    chat: tmi.Client | null = null
+    loggedIn: boolean = false
+    accessToken: string | null = null
+    userName: string | null = null
     callbacks: { [ key: string ]: (...args: any) => void } = {}
     channel: string | null = null
 
-    constructor(accessToken: string, userName: string) {
-        this.accessToken = accessToken
-        this.userName = userName
+    public static getInstance(): TwitchClient {
+        if (!TwitchClient.instance) {
+            TwitchClient.instance = new TwitchClient()
+        }
+
+        return TwitchClient.instance
     }
 
-    static async login(accessToken: string): Promise<ChatBot> {
+    async login(accessToken: string) {
+        this.accessToken = accessToken
+
         const res = await fetch('https://api.twitch.tv/helix/users', {
             headers: {
                 Authorization: `Bearer ${accessToken}`,
@@ -47,26 +31,28 @@ export class ChatBot {
         })
 
         const body = await res.json()
-        const name = body.data[0].display_name
 
-        return new ChatBot(accessToken, name)
+        this.userName = body.data[0].display_name
+        this.loggedIn = true
     }
 
     connect(channel: string) {
-        this.channel = channel
-        if (this.client !== null) this.client.disconnect()
+        if (!this.loggedIn) throw 'connecting to chat before login'
 
-        this.client = new tmi.Client({
+        this.channel = channel
+        if (this.chat !== null) this.chat.disconnect()
+
+        this.chat = new tmi.Client({
             identity: {
-                username: this.userName,
+                username: this.userName!,
                 password: `oauth:${this.accessToken}`
             },
             channels: [ channel ]
         })
 
-        this.client.connect()
+        this.chat.connect()
 
-        this.client.on('message', (channel: string, tags: tmi.ChatUserstate, message: string, self: boolean) =>
+        this.chat.on('message', (channel: string, tags: tmi.ChatUserstate, message: string, self: boolean) =>
             this.handleMessage(channel, tags, message, self)
         )
     }
@@ -81,6 +67,7 @@ export class ChatBot {
 
     handleMessage(channel: string, tags: tmi.ChatUserstate, message: string, self: boolean) {
         if (self) return
+        console.log(message)
         if (!message.startsWith('!')) return
 
         const user: User = {
@@ -102,9 +89,9 @@ export class ChatBot {
     }
 
     say(message: string) {
-        if (!this.client) return
+        if (!this.chat) return
         if (!this.channel) return
-        this.client.say(this.channel, message)
+        this.chat.say(this.channel, message)
     }
 
     async searchChannels(query: string): Promise<string[]> {
@@ -124,5 +111,28 @@ export class ChatBot {
         const channels = body.data.map((x: any) => x.display_name)
 
         return channels
+    }
+
+    static getAuthURL(): string {
+        return formURL('https://id.twitch.tv/oauth2/authorize', {
+            client_id: CLIENT_ID,
+            redirect_uri: 'http://localhost:5173/twitchcallback/',
+            response_type: 'token',
+            scope: 'chat:read chat:edit'
+        })
+    }
+
+    static async tokenIsValid(token: string) {
+        const res = await fetch('https://id.twitch.tv/oauth2/validate', {
+            headers: {
+                Authorization: `Bearer ${token}`
+            }
+        })
+    
+        if (res.status !== 200) return false
+    
+        const body = await res.json()
+        if (body.expires_in < 60 * 60 * 24) return false
+        return true
     }
 }

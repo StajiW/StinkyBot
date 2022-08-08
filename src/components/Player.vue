@@ -1,6 +1,6 @@
 <script setup lang='ts'>
 import { PropType, ref } from 'vue'
-import { Request, RequestType } from '../scripts/request.js'
+import { Request, RequestType } from '../scripts/util.js'
 
 const started = ref(false)
 

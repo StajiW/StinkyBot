@@ -1,8 +1,12 @@
 <script setup lang='ts'>
+import TextInput from './TextInput.vue'
 import { PropType, reactive, watch, ref } from 'vue'
 import { defaultSettings, Settings } from '../scripts/settings'
 import { deepCopy } from '../scripts/util'
-import { ChatBot } from '../scripts/twitch'
+import TwitchClient from '../scripts/twitch'
+import SpotifyClient from '../scripts/spotify'
+import NumberInput from './NumberInput.vue'
+import AccountInput from './AccountInput.vue'
 
 const props = defineProps({
     settings: {
@@ -12,17 +16,14 @@ const props = defineProps({
     active: {
         type: Boolean,
         required: true
-    },
-    chatBot: {
-        type: Object as PropType<ChatBot>,
-        required: false
     }
 })
 
+const twitchClient = TwitchClient.getInstance()
+const spotifyClient = SpotifyClient.getInstance()
 let settings: Settings = reactive(deepCopy(props.settings) as Settings)
 let page = ref(0)
-let suggestions = ref<string[]>([])
-let lastUpdate = 0
+let closeMenu = ref(false)
 
 const emit = defineEmits(['exit', 'save'])
 
@@ -31,36 +32,20 @@ function handleClick(e: MouseEvent) {
     if (target.id === 'settingsContainer') {
         emit('exit')
     }
-}
-
-function isNumber(e: KeyboardEvent) {
-    return !isNaN(parseInt(e.key))
-}
-
-function isEmptyString(num: number) {
-    return (num !== 0 && !num)
+    if (!target.classList.contains('Menu') && !target.classList.contains('Dots')) {
+        closeMenu.value = !closeMenu.value
+    }
 }
 
 function save() {
-    if (isEmptyString(settings.maxDuration)) settings.maxDuration = defaultSettings.maxDuration
-    if (isEmptyString(settings.maxRequests)) settings.maxRequests = defaultSettings.maxRequests
+    if (isNaN(settings.maxDuration)) settings.maxDuration = defaultSettings.maxDuration
+    if (isNaN(settings.maxRequests)) settings.maxRequests = defaultSettings.maxRequests
     emit('save', settings)
 }
 
 watch(() => props.active, () => {
     if (props.active) Object.assign(settings, reactive(deepCopy(props.settings) as Settings))
 })
-
-async function updateSuggestions(str: string) {
-    console.log(str)
-    const time = new Date().getTime()
-    lastUpdate = time
-    if (props.chatBot === undefined) return
-    if (lastUpdate - time < 1000) return
-
-    const names = await props.chatBot.searchChannels(str)
-    suggestions.value = names
-}
 </script>
 
 <template>
@@ -72,78 +57,46 @@ async function updateSuggestions(str: string) {
                 <div class='Section'>
                     <div class='Name'>Platforms</div>
                     <div id='platforms'>
-                        <div class='Icon' :class='{ InActive: !settings.spotify }' id='spotify' />
+                        <a v-if='!spotifyClient.loggedIn' :href='spotifyClient.getAuthURL()' @click='spotifyClient.followLink'><div class='Icon InActive' id='spotify' /></a>
+                        <div v-else class='Icon' :class='{ InActive: !settings.spotify }' id='spotify' @click='settings.spotify = !settings.spotify' />
                         <div class='Icon' :class='{ InActive: !settings.youtube }' id='youtube' @click='settings.youtube = !settings.youtube' />
                         <div class='Icon' :class='{ InActive: !settings.soundCloud }' id='soundCloud' @click='settings.soundCloud = !settings.soundCloud'/>
                     </div>
                 </div>
                 <div class='Section'>
                     <div class='Name'>Requests</div>
-                    <div class='Setting'>
-                        <div class='Name'>Max request length (minutes)</div>
-                        <input type='number' size='1' v-model='settings.maxDuration' :onkeypress='(e: KeyboardEvent) => { return isNumber(e) }'>
-                    </div>
-                    <div class='Setting'>
-                        <div class='Name'>Max requests per user</div>
-                        <input type='number' size='1' v-model='settings.maxRequests' :onkeypress='(e: KeyboardEvent) => { return isNumber(e) }'>
-                    </div>
+                    <NumberInput label='Max request length (minutes)' v-model='settings.maxDuration' />
+                    <NumberInput label='Max requests per user' v-model='settings.maxRequests' />
                 </div>
                 <div class='Section'>
                     <div class='Name'>Twitch</div>
-                    <div class='Setting'>
-                        <div class='Name'>Channel</div>
-                        <div class='InputContainer'>
-                            <input type='text' v-model='settings.connectedChannel' >
-                            <div class='Suggestions' v-if='suggestions.length > 0' @input='(e) => { updateSuggestions((e.target as HTMLInputElement).value) }'>
-                                <div class='Suggestion' v-for='suggestion in suggestions'>{{ suggestion }}</div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class='Setting'>
-                        <div class='Name'>Bot Account</div>
-                        <div class='UnEditable'>
-                            <div>ChannelName</div>
-                            <div class='Dots' />
-                        </div>
-                    </div>
+                    <TextInput label='Channel' v-model='settings.connectedChannel'/>
+                    <AccountInput
+                    label='Bot Account'
+                    :user='twitchClient.userName || undefined'
+                    :connectLink='TwitchClient.getAuthURL()'
+                    :closeMenu='closeMenu'
+                    />
                 </div>
                 <div class='Section'>
                     <div class='Name'>Music</div>
-                    <div class='Setting'>
-                        <div class='Name'>Spotify Account</div>
-                        <div class='UnEditable'>
-                            <div>AccountName</div>
-                            <div class='Dots' />
-                        </div>
-                    </div>
-                    <div class='Setting'>
-                        <div class='Name'>Fallback Playlist</div>
-                        <input class='Grow' type='text' v-model='settings.fallback'>
-                    </div>
+                    <AccountInput
+                    label='Spotify Account'
+                    :user='spotifyClient.userName || undefined'
+                    :connectLink='spotifyClient.getAuthURL()'
+                    @connect='(e) => spotifyClient.followLink(e)'
+                    :closeMenu='closeMenu'  
+                    />
+                    <TextInput label='Fallback Playlist' v-model='settings.fallback'/>
                 </div>
             </div>
             <div class='Page'>
                 <div class='Nav' id='topLeft' @click='page = 0'><div class='Arrow' /> General</div>
-                <div class='Setting'>
-                    <div class='Name'>Request</div>
-                    <input class='Grow' type='text' v-model='settings.fallback'>
-                </div>
-                <div class='Setting'>
-                    <div class='Name'>Edit</div>
-                    <input class='Grow' type='text' v-model='settings.fallback'>
-                </div>
-                <div class='Setting'>
-                    <div class='Name'>Cancel Request</div>
-                    <input class='Grow' type='text' v-model='settings.fallback'>
-                </div>
-                <div class='Setting'>
-                    <div class='Name'>Position</div>
-                    <input class='Grow' type='text' v-model='settings.fallback'>
-                </div>
-                <div class='Setting'>
-                    <div class='Name'>Queue</div>
-                    <input class='Grow' type='text' v-model='settings.fallback'>
-                </div>
+                <TextInput label='Request' v-model='settings.fallback' />
+                <TextInput label='Edit' v-model='settings.fallback' />
+                <TextInput label='Cancel Request' v-model='settings.fallback' />
+                <TextInput label='Position' v-model='settings.fallback' />
+                <TextInput label='Queue' v-model='settings.fallback' />
             </div>
         </div>
         <div id='save' @click='save()'>Save</div>
@@ -243,68 +196,6 @@ async function updateSuggestions(str: string) {
     font-size: 0.9rem;
 }
 
-.Setting > .Name {
-    margin-right: 1rem;
-}
-
-.Setting .InputContainer {
-    position: relative;
-    width: calc(50% - 1rem);
-    margin-left: -.25rem;
-}
-
-.Setting .InputContainer input {
-    width: 100%;
-    margin-left: -.5rem;
-}
-
-.Suggestions {
-    position: absolute;
-    left: -.5rem;
-    width: 100%;
-    margin-top: .25rem;
-    padding: .25rem;
-    text-align: right;
-
-    background-color: #E0E0E0;
-    color: #404040;
-    border-radius: .25rem;
-    outline: .25rem solid white;
-}
-
-.Setting input {
-    min-width: 0;
-    width: calc(50% - 1rem);
-    padding: .25rem;
-    margin: 0;
-    margin-top: -.25rem;
-    
-    font-size: inherit;
-    font-family: inherit;
-    font-weight: inherit;
-    text-align: right;
-
-    border: none;
-    border-radius: .25rem;
-    background-color: #E0E0E0;
-    color: #404040;
-}
-
-input::-webkit-outer-spin-button,
-input::-webkit-inner-spin-button {
-    -webkit-appearance: none;
-    margin: 0;
-}
-
-input[type=number] {
-    width: 3em;
-    -moz-appearance: textfield; /* Firefox */
-}
-
-.Setting input:focus {
-    outline: none;
-}
-
 .Icon {
     display: inline-block;
     width: 1em; 
@@ -350,16 +241,6 @@ input[type=number] {
     background-image: url('../assets/soundcloud.svg');
 }
 
-.Setting .Button {
-    width: calc(50% - 1rem);
-
-    padding: 0.25rem;
-    font-size: inherit;
-    font-weight: 400;
-    border: 1px solid black;
-    box-sizing: border-box;
-}
-
 #save {
     text-align: center;
     padding: .5rem;
@@ -369,15 +250,31 @@ input[type=number] {
     border-radius: .25rem;
 }
 
-.Dots {
-    width: 1.25em;
-    height: 1.25em;
-    margin-bottom: -.25em;
-    background-image: url(../assets/dots.svg);
-    background-size: cover;
-}
-
 .UnEditable > div {
     display: inline-block;
+}
+</style>
+
+<style>
+input {
+    min-width: 0;
+    width: calc(50% - 1rem);
+    padding: .25rem;
+    margin: 0;
+    margin-top: -.25rem;
+    
+    font-size: inherit;
+    font-family: inherit;
+    font-weight: inherit;
+    text-align: right;
+
+    border: none;
+    border-radius: .25rem;
+    background-color: #E0E0E0;
+    color: #404040;
+}
+
+input:focus {
+    outline: none;
 }
 </style>

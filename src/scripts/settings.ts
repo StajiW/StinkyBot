@@ -1,4 +1,4 @@
-import { RequestType } from './request'
+import { RequestType } from './util'
 
 export type Settings = {
     spotify: boolean,
@@ -12,7 +12,7 @@ export type Settings = {
 }
 
 export const defaultSettings: Settings = {
-    spotify: false,
+    spotify: true,
     youtube: true,
     soundCloud: true,
     maxDuration: 10,

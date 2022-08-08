@@ -1,6 +1,6 @@
 <script setup lang='ts'>
 import { onMounted, PropType } from 'vue'
-import { Request } from '../scripts/request.js'
+import { Request } from '../scripts/util.js'
 const props = defineProps({
     requests: {
         type: Array as PropType<Request[]>,
@@ -22,7 +22,7 @@ const iconClasses = {
             <div class='Index'>{{ index + 1 }}</div>
             <div class='Info'>
                 <div class='Title'>{{ request.title }}</div>
-                <div class='RequestedBy' :style='{ color: request.color }'>{{ request.requestedBy }}</div>
+                <div class='RequestedBy' :style='{ color: request.requestedBy.color }'>{{ request.requestedBy.name }}</div>
             </div>
         </div>
         <div class='Icon' :class='iconClasses[request.type]' />

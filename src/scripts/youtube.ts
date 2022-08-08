@@ -1,5 +1,5 @@
-import { Request, RequestType } from './request'
-import { formURL } from './util'
+// import { Request, RequestType } from './request'
+import { Request, RequestType, formURL, User } from './util'
 import moment from 'moment'
 
 const API_KEY = 'AIzaSyC4fYJlSpH7L3x5Z5iaj_eE--JGMCrgis0'
@@ -30,7 +30,7 @@ export class YoutubeRequest extends Request {
         return body.items[0]
     }
 
-    static async fromURL(url: string, user: string, color: string): Promise<YoutubeRequest> {
+    static async fromURL(url: string, user: User): Promise<YoutubeRequest> {
         const id = YoutubeRequest.getIDFromURL(url)
         const video = await YoutubeRequest.getVideo(id)
         const duration = moment.duration(video.contentDetails.duration)
@@ -45,8 +45,7 @@ export class YoutubeRequest extends Request {
             title,
             user,
             duration.asSeconds(),
-            video.id,
-            color
+            video.id
         )
     }
 }

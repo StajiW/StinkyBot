@@ -1,16 +1,18 @@
 <script setup lang='ts'>
 import { onMounted, ref, reactive } from 'vue'
-import { getTwitchAuthURL, ChatBot, tokenIsValid } from './scripts/twitch'
-import { Request } from './scripts/request'
+import TwitchClient from './scripts/twitch'
+import SpotifyClient from './scripts/spotify'
+import { getRequestFromMessage } from './scripts/request'
 import { YoutubeRequest } from './scripts/youtube'
 import SettingsPage from './components/SettingsPage.vue'
 import { defaultSettings, Settings } from './scripts/settings'
 import Requests from './components/Requests.vue'
-import { User } from './scripts/util'
+import { Request, User } from './scripts/util'
 import Player from './components/Player.vue'
 import Cookies from 'js-cookie'
 
-let chatBot = ref<ChatBot | null>(null)
+const twitchClient = TwitchClient.getInstance()
+const spotifyClient = SpotifyClient.getInstance()
 let loggedIn = ref(false)
 let loaded = ref(false)
 let inSettings = ref(false)
@@ -29,11 +31,19 @@ onMounted(async () => {
 	}
 	else {
 		const twitchToken = Cookies.get('twitchToken')
-		if (twitchToken && await tokenIsValid(twitchToken)) await twitchLogin(twitchToken)
+		if (twitchToken !== undefined && await TwitchClient.tokenIsValid(twitchToken)) await twitchLogin(twitchToken)
+
+		const spotifyToken = Cookies.get('spotifyToken')
+		if (spotifyToken !== undefined) await spotifyLogin(spotifyToken)
 	}
 
-	requests.push(await YoutubeRequest.fromURL('https://www.youtube.com/watch?v=DjYZ0enekbQ', 'StajiW', '#FF69B4'))
-	requests.push(await YoutubeRequest.fromURL('https://www.youtube.com/watch?v=z3CxXTMmSvk', 'StajiW', '#FF69B4'))
+	const user: User = {
+		name: 'StajiW',
+		id: 0,
+		color: '#FF69B4'
+	}
+	requests.push(await YoutubeRequest.fromURL('https://www.youtube.com/watch?v=DjYZ0enekbQ', user))
+	requests.push(await YoutubeRequest.fromURL('https://www.youtube.com/watch?v=z3CxXTMmSvk', user))
 	current.value = requests[0]
 
 	loaded.value = true
@@ -46,27 +56,42 @@ async function twitchCallback() {
 	if (params.get('error')) return
 	const accessToken = params.get('access_token')
 	if (accessToken === null) return
-	twitchLogin(accessToken)
 
 	Cookies.set('twitchToken', accessToken)
 
-	// window.location.replace('/')
-	history.replaceState(null, '', '/')
+	window.location.href = '/'
 }
 
 async function twitchLogin(token: string) {
-	chatBot.value = await ChatBot.login(token)
-	chatBot.value.connect('stajiw')
-	chatBot.value.on('request', request)
+	await twitchClient.login(token)
+	twitchClient.connect('stajiw')
+	twitchClient.on('request', request)
 	loggedIn.value = true
 }
 
 async function spotifyCallback() {
-	
+	const params = new URL(window.location.href).searchParams
+
+	if (params.get('error')) return
+	const code = params.get('code')
+	if (code === null) return
+
+
+	const body = await SpotifyClient.getAccessToken(code)
+	const expires = new Date().getTime() + body.expires_in * 1000
+	Cookies.set('spotifyToken', body.access_token)
+	Cookies.set('spotifyRefreshToken', body.refresh_token)
+	Cookies.set('expires', expires.toString())
+
+	window.location.href = '/'
+}
+
+async function spotifyLogin(token: string) {
+	spotifyClient.login(token, Cookies.get('spotifyRefreshToken')!, parseInt(Cookies.get('expires')!))
 }
 
 async function request(user: User, request: string) {
-	requests.push(await YoutubeRequest.fromURL(request, user.name, user.color))
+	await getRequestFromMessage(request, user)
 }
 
 function getSettings(): Settings {
@@ -85,9 +110,9 @@ function saveSettings(newSettings: Settings) {
 <div id='content'>
 	<div id='topBar'>
 		<div id='header'>StinkyBot<span> by <a href='https://www.twitch.tv/stajiw'>StajiW</a></span></div>
-		<div id='settingsIcon' v-if='loggedIn' @click='inSettings = true'/>
+		<div id='settingsIcon' @click='inSettings = true'/>
 	</div>
-	<div id='bottomBar' v-if='loggedIn && loaded'>
+	<div id='bottomBar'>
 		<div class='Column'>
 			<Requests :requests='requests' />
 		</div>
@@ -97,13 +122,12 @@ function saveSettings(newSettings: Settings) {
 	</div>
 </div>
 
-<a :href='getTwitchAuthURL()' v-if='!loggedIn && loaded'><div class='Button Centered'>Log in with your Twitch (bot) account</div></a>
+<!-- <a :href='TwitchClient.getAuthURL()' v-if='!loggedIn && loaded'><div class='Button Centered'>Log in with your Twitch (bot) account</div></a> -->
 
 <SettingsPage
 v-if='loaded'
 :active='inSettings'
 :settings='settings'
-:chatBot='chatBot || undefined'
 @exit='inSettings = false'
 @save='(newSettings: Settings) => saveSettings(newSettings)'
 />
@@ -198,22 +222,6 @@ html, body {
 a {
 	text-decoration: none;
 	color: black;
-}
-
-.Button {
-	width: 20rem;
-	padding: 2rem;
-
-	text-align: center;
-	font-size: 2rem;
-	font-weight: 700;
-
-	border: 5px solid black;
-
-	user-select: none;
-	cursor: pointer;
-
-	background-color: white;
 }
 
 .Centered {
