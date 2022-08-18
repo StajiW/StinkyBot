@@ -1,5 +1,6 @@
 import { User } from './util'
 import { YoutubeRequest } from './youtube'
+import { SpotifyRequest } from './spotify'
 
 const urlRegex = /[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_\+.~#?&//=]*)/
 
@@ -7,10 +8,9 @@ export async function getRequestFromMessage(message: string, user: User) {
     const words = message.split(' ')
     const url = getURLFromWord(words[0])
     if (url === null) {
-        // return SpotifyRequest.fromQuery(message)
-        return
+        return SpotifyRequest.fromQuery(message, user)
     }
-    
+
     switch (url.host) {
         case 'www.youtube.com':
         case 'www.youtube.be':
@@ -26,6 +26,8 @@ export async function getRequestFromMessage(message: string, user: User) {
         //     return SpotifyRequest.fromURL(url)
 
     }
+
+    return SpotifyRequest.fromQuery(message, user)
 }
 
 export function getURLFromWord(word: string): URL | null {

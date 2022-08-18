@@ -1,5 +1,4 @@
-// import { Request, RequestType } from './request'
-import { Request, RequestType, formURL, User } from './util'
+import { Request, RequestType, formURL, User, NotFoundError, InputError, UnexpectedError } from './util'
 import moment from 'moment'
 
 const API_KEY = 'AIzaSyC4fYJlSpH7L3x5Z5iaj_eE--JGMCrgis0'
@@ -10,7 +9,7 @@ export class YoutubeRequest extends Request {
     static getIDFromURL(url: string): string {
         const params = new URL(url).searchParams
         const id = params.get('v')
-        if (id === null) throw 'invalid url'
+        if (id === null) throw new InputError()
         return id
     }
 
@@ -22,10 +21,9 @@ export class YoutubeRequest extends Request {
         })
 
         const res = await fetch(url)
-
+        if (res.status !== 200) throw new UnexpectedError()
         const body = await res.json()
-        
-        if (!body.items || body.items.length < 1) throw 'video not found'
+        if (!body.items || body.items.length < 1) throw new NotFoundError()
 
         return body.items[0]
     }

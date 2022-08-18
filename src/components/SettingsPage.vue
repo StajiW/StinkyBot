@@ -4,7 +4,7 @@ import { PropType, reactive, watch, ref } from 'vue'
 import { defaultSettings, Settings } from '../scripts/settings'
 import { deepCopy } from '../scripts/util'
 import TwitchClient from '../scripts/twitch'
-import SpotifyClient from '../scripts/spotify'
+import { SpotifyClient } from '../scripts/spotify'
 import NumberInput from './NumberInput.vue'
 import AccountInput from './AccountInput.vue'
 
@@ -72,7 +72,7 @@ watch(() => props.active, () => {
                     <div class='Name'>Twitch</div>
                     <TextInput label='Channel' v-model='settings.connectedChannel'/>
                     <AccountInput
-                    label='Bot Account'
+                    label='Bot account'
                     :user='twitchClient.userName || undefined'
                     :connectLink='TwitchClient.getAuthURL()'
                     :closeMenu='closeMenu'
@@ -81,22 +81,24 @@ watch(() => props.active, () => {
                 <div class='Section'>
                     <div class='Name'>Music</div>
                     <AccountInput
-                    label='Spotify Account'
+                    label='Spotify account'
                     :user='spotifyClient.userName || undefined'
                     :connectLink='spotifyClient.getAuthURL()'
                     @connect='(e) => spotifyClient.followLink(e)'
-                    :closeMenu='closeMenu'  
+                    :closeMenu='closeMenu'
+                    @logout='spotifyClient.logout()'
                     />
-                    <TextInput label='Fallback Playlist' v-model='settings.fallback'/>
+                    <TextInput label='Fallback playlist' v-model='settings.fallback'/>
                 </div>
             </div>
             <div class='Page'>
                 <div class='Nav' id='topLeft' @click='page = 0'><div class='Arrow' /> General</div>
                 <TextInput label='Request' v-model='settings.fallback' />
                 <TextInput label='Edit' v-model='settings.fallback' />
-                <TextInput label='Cancel Request' v-model='settings.fallback' />
+                <TextInput label='Cancel request' v-model='settings.fallback' />
                 <TextInput label='Position' v-model='settings.fallback' />
                 <TextInput label='Queue' v-model='settings.fallback' />
+                <TextInput label='Current' v-model='settings.fallback' />
             </div>
         </div>
         <div id='save' @click='save()'>Save</div>

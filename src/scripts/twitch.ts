@@ -65,9 +65,8 @@ export default class TwitchClient {
         this.callbacks[eventName] = callback
     }
 
-    handleMessage(channel: string, tags: tmi.ChatUserstate, message: string, self: boolean) {
+    handleMessage(_: string, tags: tmi.ChatUserstate, message: string, self: boolean) {
         if (self) return
-        console.log(message)
         if (!message.startsWith('!')) return
 
         const user: User = {

@@ -1,21 +1,28 @@
 <script setup lang='ts'>
 import { onMounted, ref, reactive } from 'vue'
-import TwitchClient from './scripts/twitch'
-import SpotifyClient from './scripts/spotify'
-import { getRequestFromMessage } from './scripts/request'
-import { YoutubeRequest } from './scripts/youtube'
-import SettingsPage from './components/SettingsPage.vue'
-import { defaultSettings, Settings } from './scripts/settings'
-import Requests from './components/Requests.vue'
-import { Request, User } from './scripts/util'
-import Player from './components/Player.vue'
 import Cookies from 'js-cookie'
+
+import { Request, User, ErrorCode } from './scripts/util'
+import { SpotifyClient } from './scripts/spotify'
+import { defaultSettings, Settings } from './scripts/settings'
+import { getRequestFromMessage } from './scripts/request'
+
+import TwitchClient from './scripts/twitch'
+import SettingsPage from './components/SettingsPage.vue'
+import Requests from './components/Requests.vue'
+import Player from './components/Player.vue'
+import Notification from './components/notification.vue'
 
 const twitchClient = TwitchClient.getInstance()
 const spotifyClient = SpotifyClient.getInstance()
-let loggedIn = ref(false)
+// @ts-ignore
+window.onYouTubeIframeAPIReady = () => {}
+window.onSpotifyWebPlaybackSDKReady = () => {}
+
 let loaded = ref(false)
 let inSettings = ref(false)
+let notification = ref<string | null>(null)
+
 let requests: Request[] = reactive([])
 let settings: Settings = reactive(getSettings())
 let current = ref<Request | null>(null)
@@ -42,9 +49,12 @@ onMounted(async () => {
 		id: 0,
 		color: '#FF69B4'
 	}
-	requests.push(await YoutubeRequest.fromURL('https://www.youtube.com/watch?v=DjYZ0enekbQ', user))
-	requests.push(await YoutubeRequest.fromURL('https://www.youtube.com/watch?v=z3CxXTMmSvk', user))
-	current.value = requests[0]
+
+	await request(user, 'https://www.youtube.com/watch?v=DjYZ0enekbQ')
+	await request(user, 'web of worry')
+	await request(user, 'karnivool goliath')
+	await request(user, 'https://www.youtube.com/watch?v=z3CxXTMmSvk')
+	current.value = requests.shift()!
 
 	loaded.value = true
 })
@@ -66,7 +76,6 @@ async function twitchLogin(token: string) {
 	await twitchClient.login(token)
 	twitchClient.connect('stajiw')
 	twitchClient.on('request', request)
-	loggedIn.value = true
 }
 
 async function spotifyCallback() {
@@ -76,22 +85,36 @@ async function spotifyCallback() {
 	const code = params.get('code')
 	if (code === null) return
 
-
-	const body = await SpotifyClient.getAccessToken(code)
-	const expires = new Date().getTime() + body.expires_in * 1000
-	Cookies.set('spotifyToken', body.access_token)
-	Cookies.set('spotifyRefreshToken', body.refresh_token)
-	Cookies.set('expires', expires.toString())
+	await spotifyClient.setAccessToken(code)
 
 	window.location.href = '/'
 }
 
 async function spotifyLogin(token: string) {
 	spotifyClient.login(token, Cookies.get('spotifyRefreshToken')!, parseInt(Cookies.get('expires')!))
+	spotifyClient.on('authfail', () => {
+		notification.value = 'Unexpected disconnect with linked Spotify account, please log in again if you want to keep using Spotify functionality'
+	})
 }
 
-async function request(user: User, request: string) {
-	await getRequestFromMessage(request, user)
+async function request(user: User, message: string) { 
+	try {
+		const request = await getRequestFromMessage(message, user)
+		requests.push(request)
+		twitchClient.say(`@${user.name} Your request "${request.title}" got added to the queue`)
+	} catch (error: any) {
+		switch (error.code) {
+			case ErrorCode.NotFound:
+				twitchClient.say(`@${user.name} Request not found`)
+				break
+			case ErrorCode.Input:
+				twitchClient.say(`@${user.name} Invalid request`)
+				break
+			default:
+				twitchClient.say(`@${user.name} Something went wrong while processing your request, sorry about that`)
+				console.error(error)
+		}
+	}
 }
 
 function getSettings(): Settings {
@@ -104,6 +127,10 @@ function saveSettings(newSettings: Settings) {
 	Object.assign(settings, newSettings)
 	Cookies.set('settings', JSON.stringify(settings))
 }
+
+function nextRequest() {
+	current.value = requests.shift()!
+}
 </script>
 
 <template>
@@ -114,15 +141,13 @@ function saveSettings(newSettings: Settings) {
 	</div>
 	<div id='bottomBar'>
 		<div class='Column'>
-			<Requests :requests='requests' />
+			<Requests :requests='requests' :current='current || undefined' @skip='() => nextRequest()' />
 		</div>
 		<div class='Column'>
 			<Player :request='current || undefined' />
 		</div>
 	</div>
 </div>
-
-<!-- <a :href='TwitchClient.getAuthURL()' v-if='!loggedIn && loaded'><div class='Button Centered'>Log in with your Twitch (bot) account</div></a> -->
 
 <SettingsPage
 v-if='loaded'
@@ -132,6 +157,7 @@ v-if='loaded'
 @save='(newSettings: Settings) => saveSettings(newSettings)'
 />
 
+<Notification :notification='notification || undefined' @dismiss='notification = null' />
 </template>
 
 <style>
@@ -166,7 +192,7 @@ html, body {
 
 #header {
 	font-size: 3rem;
-	font-weight: 700;
+	font-weight: 600;
 	padding-bottom: 1rem;
 
 	user-select: none;
@@ -231,9 +257,9 @@ a {
 	transform: translate(-50%, -50%);
 }
 
-/* @media (max-width: 800px) {
+@media (max-width: 800px) {
 	html { font-size: 0.8rem; }
 	.Column { width: 100%; }
 	#bottomBar { flex-direction: column-reverse; }
-} */
+}
 </style>
